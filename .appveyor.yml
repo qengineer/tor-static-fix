@@ -1,0 +1,79 @@
+version: '{build}'
+platform: x64
+configuration: Release
+os: Visual Studio 2015
+
+clone_depth: 50
+clone_folder: c:\gopath\src\github.com\cretz\tor-static
+
+environment:
+  GOPATH: c:\gopath
+
+install:
+  - set PATH=C:\msys64\usr\bin;%PATH%
+  - set MSYSTEM=MINGW64
+  # fix 0
+  - bash -lc "curl -O http://repo.msys2.org/msys/x86_64/msys2-keyring-r21.b39fb11-1-any.pkg.tar.xz"
+  - bash -lc "curl -O http://repo.msys2.org/msys/x86_64/msys2-keyring-r21.b39fb11-1-any.pkg.tar.xz.sig"
+  - bash -lc "pacman-key --verify msys2-keyring-r21.b39fb11-1-any.pkg.tar.xz.sig"
+  - bash -lc "yes | pacman -U msys2-keyring-r21.b39fb11-1-any.pkg.tar.xz"
+  # endfix 0
+  # couldn't open file fix
+  - taskkill /fi "MODULES eq msys-2.0.dll"
+  - bash -lc "pacman --noconfirm -U http://repo.msys2.org/msys/x86_64/libzstd-1.4.4-2-x86_64.pkg.tar.xz"
+  - bash -lc "pacman --noconfirm -U http://repo.msys2.org/msys/x86_64/zstd-1.4.4-2-x86_64.pkg.tar.xz"
+  - bash -lc "pacman --noconfirm -U http://repo.msys2.org/msys/x86_64/pacman-5.2.1-6-x86_64.pkg.tar.xz"
+  - taskkill /fi "MODULES eq msys-2.0.dll"
+  # end couldn't open file fix
+  - bash -lc "pacman --noconfirm -Syuu"
+  # fix couldn't open file?
+  - taskkill /fi "MODULES eq msys-2.0.dll"
+  - bash -lc "pacman --noconfirm -Syuu"
+  - taskkill /fi "MODULES eq msys-2.0.dll"
+  - bash -lc "pacman -Sy --noconfirm --needed base-devel mingw-w64-i686-toolchain mingw-w64-x86_64-toolchain git mingw-w64-i686-cmake mingw-w64-x86_64-cmake"
+  # restore old autoconf version
+  - bash -lc "pacman --noconfirm -U http://repo.msys2.org/msys/x86_64/autoconf-2.69-5-any.pkg.tar.xz"
+  
+
+before_build:
+  - set MSYSTEM=MINGW64
+  - cd c:\gopath\src\github.com\cretz
+  - ren tor-static tmp-tor-static-fix
+  - mkdir tor-static
+  - cd tor-static
+  - git clone https://github.com/cretz/tor-static . --recurse-submodules
+  - copy ..\tmp-tor-static-fix\win-build-fix\build.go build.go
+  - rd /q /s "../tmp-tor-static-fix"
+
+build_script:
+  - set MSYSTEM=MINGW64
+  # another fix
+  - set CHERE_INVOKING=yes
+  - bash -lc "export PATH=/mingw64/bin:$PATH && cd /c/gopath/src/github.com/cretz/tor-static && /c/go/bin/go run build.go -verbose build-all"
+
+test_script:
+  - set PATH=C:\msys64\mingw64\bin;%PATH%
+  - go get -u github.com/cretz/bine/tor
+  - cd c:\gopath\src\github.com\cretz\tor-static
+  - go test -v build_test.go -tor.verbose
+  
+  
+after_build:
+  - cd c:\gopath\src\github.com\cretz\tor-static
+  - go run build.go package-libs
+  - cp libs.zip tor-static-windows-amd64.zip
+
+artifacts:
+- path: tor-static-windows-amd64.zip
+
+deploy:
+  description: 'New tor-static release'
+  provider: GitHub
+  auth_token:
+    secure: 8htKjdjnEI+42K2If2hBVYWrGPIaFapjtwXxpxqCDw5ryc4oBOOTtlOl/As5fWtC
+  artifact: tor-static-windows-amd64.zip
+  draft: true
+  tag: $(APPVEYOR_REPO_TAG_NAME)
+  on:
+    branch: master
+    APPVEYOR_REPO_TAG: true
